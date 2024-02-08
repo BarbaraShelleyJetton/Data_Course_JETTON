@@ -1,0 +1,7 @@
+Idea for final project:
+I found a Data set that contains personal license plate applications from the California DMV (2015 - 2016).
+The plates were all flagged for review for various reasons. I want to look into what the most common reason 
+for flagging was, the percentage of plates that got approved, and possibly the most common cusomter reason 
+(if I can find a way to find common words, I've seen a lot of reasons for family, pets, cars, etc). The 
+data contains 23,463 plates with the following columns: plate, review_reason_code, customer_meaning, 
+reviewer_comments, and status. I also have information on what the reason code means.
