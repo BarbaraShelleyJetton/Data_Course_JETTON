@@ -1,44 +1,206 @@
 ---
-output: 
-html_document:
-  number_sections=TRUE
-pagetitle: Assignment_9
+output: html_document
 ---
-
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(easystats)
+library(tidymodels)
+dat <- read_csv("../../Data/GradSchool_Admissions.csv")
 ```
 
-# **Assignment 9**
+### Assignment 9
 
-In this assignment, you will use R (within R-Studio) to:
-  
-+ Load and clean a real data set
-+ Conduct exploratory analyses, including informative figures
-+ Build and test appropriate models
-+ Draw conclusions about your data
-+ Combine all of the above into a well-documented R-Markdown report and export (knit) it into an HTML file
+I am using the Grad school Admissions data set to investigate the impact of various variables on admission acceptance.
 
-**All file paths should be relative, starting from *your* Assignment_9 directory!!**
+Here are the packages I am using.
 
-**This means that you need to create a new R-Project named "Assignment_9.Rproj" in your Assignment_9 directory, and work from scripts within that.**
+```{r}
+library(tidyverse)
+library(easystats)
+library(tidymodels)
+```
 
+Lets take a glimpse at the structure of our data. 
 
-## **For credit...**
+```{r}
+head(dat)
+```
 
-1.  Push a completed version of your Rproj and R-markdown file (details at end of this assignment) to GitHub
-2.  Your score will also depend on your analyses and presentation of your final report
+Above we see that our data consists of four variables...
 
-____________
+-   admit: The students admission status (0 = rejected, 1 = accepted)
+-   gre: GRE score (ranging from 220 - 800)
+-   gpa: GPA (ranging from 2.26 - 4.00)
+-   rank: The rating of the students undergrad institution (1 being the best, 4 being the worst)
 
-# Your tasks:
+Now, lets visualize the data:
 
-+ Use the data set "/Data/GradSchool_Admissions.csv"
-+ You will explore and model the predictors of graduate school admission
-  - the "admit" column is coded as 1=success and 0=failure (that's binary, so model appropriately)
-  - the other columns are the GRE score, the GPA, and the rank of the undergraduate institution, where I is "top-tier."
-+ Document your data explorations, figures, and conclusions in a reproducible R-markdown report
-+ That means I want to see, in your html report, your process of model evaluation and selection. Here's an [example](https://gzahn.github.io/data-course/Repository/Assignments/Assignment_9/example.html){target="_blank"}
-+ Upload your **self-contained** R project, including knitted HTML report, to GitHub in *your* Assignment_9 directory
+```{r, fig.align='center'}
+ggplot(dat, aes(x = gre, y = gpa, color = as.factor(admit), size = rank)) +
+  geom_point() +
+  labs(x = "GRE Score", y = "GPA", color = "Admission Status", size = "Rank") +
+  scale_color_manual(values = c("lightblue", "pink")) +
+  scale_size_continuous(range = c(2, 6)) +  
+  theme_minimal()
+```
 
+From the plot, it appears that as GPA and GRE are positively correlated. Rank and admission status is harder to explore. 
+
+Lets look at the amount of students that were accepted (1) vs rejected (0), and the amount of students who attended each school rank (1-4).
+
+```{r}
+table(dat$admit)
+table(dat$rank)
+```
+
+------------------------------------------------------------------------
+
+Next, I'll create three models of varying complexity.
+
+```{r}
+mod1 <- glm(data = dat,
+            formula = as.logical(admit) ~ rank,
+            family = "binomial")
+
+mod2 <- glm(data = dat,
+            formula = as.logical(admit) ~ gpa + gre,
+            family = "binomial")
+
+mod3 <- glm(data = dat,
+            formula = as.logical(admit) ~ gpa * gre * rank,
+            family = "binomial")
+```
+
+-   Model 1 predicts admission based on rank
+-   Model 2 uses gpa and gre for prediction
+-   Model 3 includes interactions between gpa, gre, and rank
+
+Lets look at how they did...
+
+```{r, include=FALSE}
+#lets look at how well the models predict
+predictions_mod1 <- predict(mod1, newdata = dat, type = "response")
+predictions_mod2 <- predict(mod2, newdata = dat, type = "response")
+predictions_mod3 <- predict(mod3, newdata = dat, type = "response")
+
+#combining predictions with actual outcomes
+predictions <- data.frame(
+  admit = dat$admit,
+  prediction_mod1 = predictions_mod1,
+  prediction_mod2 = predictions_mod2,
+  prediction_mod3 = predictions_mod3
+)
+
+#converting probabilities to 0 and 1
+predictions_binary <- predictions %>%
+  mutate(
+    outcome_mod1 = ifelse(prediction_mod1 >= 0.5, 1, 0),
+    outcome_mod2 = ifelse(prediction_mod2 >= 0.5, 1, 0),
+    outcome_mod3 = ifelse(prediction_mod3 >= 0.5, 1, 0)
+  )
+
+#evaluating model performance
+performance_mod1 <- sum(predictions_binary$admit == predictions_binary$outcome_mod1) / nrow(predictions_binary)
+performance_mod2 <- sum(predictions_binary$admit == predictions_binary$outcome_mod2) / nrow(predictions_binary)
+performance_mod3 <- sum(predictions_binary$admit == predictions_binary$outcome_mod3) / nrow(predictions_binary)
+
+```
+
+```{r}
+performance_mod1
+performance_mod2
+performance_mod3
+```
+
+It seems that Model 3 had the highest accuracy at 70.75%, followed by Model 1 (69.50%), and Model 2 (68.00%). 
+
+```{r, include=FALSE}
+prediction_counts <- data.frame(
+  Model = c("mod1", "mod2", "mod3"),
+  '0' = colSums(predictions_binary[, c("outcome_mod1", "outcome_mod2", "outcome_mod3")] == 0),
+  '1' = colSums(predictions_binary[, c("outcome_mod1", "outcome_mod2", "outcome_mod3")] == 1)
+)
+
+```
+
+```{r}
+prediction_counts
+```
+
+They all predicted more students being rejected rather than accepted, so I guess that is good. Lets go ahead and compare the statistics.
+
+```{r, fig.align='center', message=FALSE}
+compare_performance(mod1, mod2, mod3, rank = TRUE)
+compare_performance(mod1, mod2, mod3, rank = TRUE) %>% plot
+```
+
+Looking at the R-squared, RMSE, and AIC, it is clear that Model 3 outperforms the other two. It seems that model 3 is our best fit. 
+
+But wait! These models were tested on data they had already seen D: 
+
+Time to retrain the models...
+
+```{r}
+set.seed(0)
+split <- initial_split(dat, prop = 0.7)
+training_dat <- training(split)
+test_dat <- testing(split)
+
+mod1 <- glm(data = training_dat,
+            formula = as.logical(admit) ~ rank,
+            family = "binomial")
+
+mod2 <- glm(data = training_dat,
+            formula = as.logical(admit) ~ gpa + gre,
+            family = "binomial")
+
+mod3 <- glm(data = training_dat,
+            formula = as.logical(admit) ~ gpa * gre * rank,
+            family = "binomial")
+```
+
+The model formulas remained the same, but they were trained on 70% of the data. The remaining 30% we will use to test the models predictions. The seed was set for reproducibility.
+
+Now lets look at the predictions again, this time using test data that the models have not seen. 
+
+```{r, include=FALSE}
+predictions_mod1 <- predict(mod1, newdata = test_dat, type = "response")
+predictions_mod2 <- predict(mod2, newdata = test_dat, type = "response")
+predictions_mod3 <- predict(mod3, newdata = test_dat, type = "response")
+
+predictions <- data.frame(
+  admit = test_dat$admit,
+  prediction_mod1 = predictions_mod1,
+  prediction_mod2 = predictions_mod2,
+  prediction_mod3 = predictions_mod3
+)
+
+predictions_binary <- predictions %>%
+  mutate(
+    outcome_mod1 = ifelse(prediction_mod1 >= 0.5, 1, 0),
+    outcome_mod2 = ifelse(prediction_mod2 >= 0.5, 1, 0),
+    outcome_mod3 = ifelse(prediction_mod3 >= 0.5, 1, 0)
+  )
+
+performance_mod1 <- sum(predictions_binary$admit == predictions_binary$outcome_mod1) / nrow(predictions_binary)
+performance_mod2 <- sum(predictions_binary$admit == predictions_binary$outcome_mod2) / nrow(predictions_binary)
+performance_mod3 <- sum(predictions_binary$admit == predictions_binary$outcome_mod3) / nrow(predictions_binary)
+```
+```{r}
+performance_mod1
+performance_mod2
+performance_mod3
+```
+
+Interesting, it looks like model 2 performed slightly worse while the other two models did slightly better. 
+Lets look more at Model 3.
+
+```{r, message = FALSE}
+mod3 %>% model_parameters()
+```
+
+The analysis suggests that GPA, GRE, and rank individually could influence grad school admission. However, the lack of significant p-values and high standard errors indicates uncertainty in most cases.
+
+Further investigation and model refinement is needed to create a more accurate model for predicting grad school admission. 

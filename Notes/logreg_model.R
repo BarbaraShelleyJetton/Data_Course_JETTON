@@ -1,5 +1,6 @@
 library(tidyverse)
 library(easystats)
+install.packages("palmerpenguins")
 library(palmerpenguins)
 
 # does body mass vary significantly between penguin species
