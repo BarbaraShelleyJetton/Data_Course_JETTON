@@ -1,0 +1,113 @@
+---
+title: "Data_Course_Final_Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(rnaturalearth)
+library(sf)
+
+dat <- read_csv("clean_data.csv")
+world <- ne_countries(scale = "medium", type = "map_units", returnclass = "sf")
+boundries <- st_bbox(world)
+dat <- dat %>% 
+  filter(latitude >= boundries[2] & latitude <= boundries[4] &
+           longitude >= boundries[1] & longitude <= boundries[3])
+```
+
+### Disaster Prediction
+
+For my final project I have found data that contains natural disaster information from 1900 - 2021 that has been gathered using NASA's Earth Observing System Data and Information System (EOSDIS). [link](https://www.kaggle.com/datasets/brsdincer/all-natural-disasters-19002021-eosdis/data)
+
+Why is this important?
+
+* risk assessment
+* environmental insights
+* cultural/societal impacts
+
+I am interested in making an interactive web app (shiny) that allows users to select disaster type and range of year to explore the timeline of disasters throughout history (will include death count/damages). I plan on plotting the data on a map of the world using coordinate information. Additionally I am interested in creating models that can be used to predict occurrence / location / risk of future disasters. 
+
+Other questions I am interested in exploring:
+
+1. What is the most deadly/damaging type of disaster?
+2. What type of disaster has occurred the most / where? 
+
+Here is a quick over view of some of the data
+```{r}
+names(dat)
+glimpse(dat)
+```
+```{r, echo=FALSE}
+disasters_by_country <- dat %>%
+  group_by(country) %>%
+  summarize(total_disasters = n())
+
+world_disasters <- left_join(world, disasters_by_country, by = c("name" = "country"))
+
+plot_country_distribution <- ggplot() +
+  geom_sf(data = world_disasters, aes(fill = total_disasters)) +
+  scale_fill_continuous(name = "Total Disasters", na.value = "white") +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  labs(title = "Total Disasters by Country")
+
+plot_total_deaths <- ggplot(dat, aes(x = year, y = total_deaths)) +
+  geom_line(color = "indianred1", size = 1.25) +
+  labs(title = "Total Deaths Over the Years",
+       x = "Year",
+       y = "Total Deaths") +
+  theme_minimal()
+
+plot_total_damages <- ggplot(dat, aes(x = year, y = total_damages)) +
+  geom_line(color = "royalblue1" ,size = 1.25) +
+  labs(title = "Total Damages Over the Years",
+       x = "Year",
+       y = "Total Damages (Millions)") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::dollar_format(scale = 1e-6))
+
+plot_disaster_type <- ggplot(dat, aes(x = disaster_type, fill = disaster_type)) +
+  geom_bar() +
+  labs(title = "Distribution of Disaster Types",
+       x = "Disaster Type",
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank())
+
+filtered_dat <- dat %>% 
+  filter(!is.na(disaster_subtype))
+
+plot_disaster_subtype <- ggplot(filtered_dat, aes(x = disaster_subtype, fill = disaster_subtype)) +
+  geom_bar() +
+  labs(title = "Distribution of Disaster Subtypes",
+       x = "Disaster Subtype",
+       y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank())
+
+```
+```{r, warning=FALSE}
+plot_country_distribution
+plot_total_deaths
+plot_total_damages
+plot_disaster_type
+plot_disaster_subtype
+```
+
+I am interested in looking at location and impact of the disasters, here is an example of the map I am using in my shiny app 
+
+```{r, echo=FALSE}
+p <- ggplot() +
+  geom_sf(data = world) +
+  theme_light() +
+  geom_point(data = dat, aes(x = longitude,
+                             y = latitude,
+                             color = disaster_type,
+                             size = total_deaths), alpha = 0.7) +
+  scale_size_continuous(range = c(1, 10))
+```
+```{r, warning=FALSE}
+p
+```
+
